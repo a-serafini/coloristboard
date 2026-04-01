@@ -4,11 +4,10 @@
   "description": "Split-flap display for The Colorist salon",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "start": "wrangler pages dev public",
+    "dev": "wrangler pages dev public"
   },
-  "dependencies": {
-    "express": "^4.21.0",
-    "jsdom": "^29.0.1"
+  "devDependencies": {
+    "wrangler": "^4.79.0"
   }
 }
