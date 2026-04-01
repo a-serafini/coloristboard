@@ -18,44 +18,7 @@
         user-select: none;
       }
 
-      /* ── Status bar ── */
-      #status-bar {
-        position: fixed; bottom: 0; left: 0; right: 0;
-        height: 40px;
-        background: rgba(0,0,0,0.88);
-        backdrop-filter: blur(10px);
-        display: flex; align-items: center; justify-content: space-between;
-        padding: 0 16px; z-index: 100;
-        font-size: 11px; color: #555;
-        border-top: 1px solid rgba(255,255,255,0.06);
-      }
-      .sb-left { display: flex; align-items: center; gap: 10px; }
-      .sb-dot {
-        width: 7px; height: 7px; border-radius: 50%;
-        background: #333; transition: background 0.3s, box-shadow 0.3s;
-      }
-      .sb-dot.open { background: #22c55e; box-shadow: 0 0 8px rgba(34,197,94,0.4); }
-      .sb-dot.closed { background: #ef4444; box-shadow: 0 0 8px rgba(239,68,68,0.3); }
-      .sb-label { font-size: 11px; color: #555; }
-      .sb-right { font-family: 'Roboto Mono', monospace; font-size: 11px; color: #444; letter-spacing: 1px; }
 
-      /* ── Accent ── */
-      .accent-bar {
-        position: fixed; top: 0; left: 0; right: 0; height: 3px;
-        background: linear-gradient(90deg, transparent 0%, #79BD74 50%, transparent 100%);
-        opacity: 0.5; z-index: 100;
-      }
-
-      /* ── Progress dots ── */
-      .progress-dots {
-        position: fixed; bottom: 52px; left: 50%; transform: translateX(-50%);
-        display: flex; gap: 8px; z-index: 100;
-      }
-      .pdot {
-        width: 6px; height: 6px; border-radius: 50%;
-        background: rgba(255,255,255,0.1); transition: background 0.3s, transform 0.3s;
-      }
-      .pdot.active { background: #79BD74; transform: scale(1.4); }
 
       /* ── Board area ── */
       .board-area {
@@ -83,17 +46,8 @@
     <style id="dynamic-board-css"></style>
   </head>
   <body>
-    <div class="accent-bar"></div>
     <div class="board-area" id="board-area">
       <div id="vestaboard-wrapper"></div>
-    </div>
-    <div class="progress-dots" id="progress-dots"></div>
-    <div id="status-bar">
-      <div class="sb-left">
-        <div class="sb-dot" id="sb-dot"></div>
-        <span class="sb-label" id="sb-label">Verbinde...</span>
-      </div>
-      <div class="sb-right" id="sb-clock"></div>
     </div>
 
     <script>
@@ -458,34 +412,12 @@
       // ── Screen cycling ──
       let currentScreenIdx = -1;
       let screenTimer = null;
-      function updateDots(total) {
-        const el = document.getElementById('progress-dots');
-        if (el.children.length !== total) {
-          el.innerHTML = '';
-          for (let i = 0; i < total; i++) { const d = document.createElement('div'); d.className = 'pdot'; el.appendChild(d); }
-        }
-        Array.from(el.children).forEach((d,i) => d.classList.toggle('active', i === currentScreenIdx));
-      }
       function showNextScreen() {
         const screens = getScreens();
         currentScreenIdx = (currentScreenIdx + 1) % screens.length;
-        updateDots(screens.length);
         flipToTarget(messageToGrid(screens[currentScreenIdx]), () => {
           screenTimer = setTimeout(showNextScreen, S.msgDelay);
         });
-      }
-
-      // ── Clock ──
-      function updateClock() {
-        const now = new Date();
-        const h = String(now.getHours()).padStart(2,'0');
-        const m = String(now.getMinutes()).padStart(2,'0');
-        const s = String(now.getSeconds()).padStart(2,'0');
-        document.getElementById('sb-clock').textContent = `${h}:${m}:${s}`;
-        const dow = now.getDay(), hr = now.getHours();
-        const isOpen = dow >= 2 && dow <= 6 && hr >= 10 && hr < 18;
-        document.getElementById('sb-dot').className = 'sb-dot ' + (isOpen ? 'open' : 'closed');
-        document.getElementById('sb-label').textContent = isOpen ? 'Ge\u00F6ffnet' : 'Geschlossen';
       }
 
       // ── Init ──
@@ -495,8 +427,6 @@
         renderBoard();
         dynamicCSS.textContent = buildDynamicCSS();
         applyAutoFit();
-        updateClock();
-        setInterval(updateClock, 1000);
 
         // Enable audio on interaction
         document.addEventListener("click", () => getAudioCtx(), { once: true });
