@@ -392,50 +392,34 @@
       function getScreens() {
         const C = S.cols;
         const now = new Date();
-        const ds = DAYS_SHORT[now.getDay()];
-        const month = MONTHS_DE[now.getMonth()];
-        const date = now.getDate();
-        const year = now.getFullYear();
-        const h = String(now.getHours()).padStart(2,'0');
-        const m = String(now.getMinutes()).padStart(2,'0');
         const dow = now.getDay();
         const isOpen = dow >= 2 && dow <= 6 && now.getHours() >= 10 && now.getHours() < 18;
 
         const screens = [];
 
-        // 1: Welcome
-        screens.push(makeMsg([
-          padCenter('THE COLORIST', C),
-          padCenter('MEILEN', C),
-          '',
-          padCenter(`${ds} ${date}. ${month} ${year}`, C),
-          padCenter(`${h}:${m}`, C),
-        ]));
-
-        // 2: Status
+        // 1: Status
         if (isOpen) {
           screens.push(makeMsg([
             '',
-            padCenter('GEOEFFNET', C),
+            padCenter('GEÖFFNET', C),
             padCenter(`HEUTE BIS 18:00 UHR`, C),
             '',
             padCenter(`NOCH ${18 - now.getHours()} STUNDEN`, C),
           ]));
         } else {
-          let nextDayName = '';
           let nd = dow;
           do { nd = (nd+1)%7; } while (nd < 2 || nd > 6);
-          nextDayName = DAYS_DE[nd];
+          const nextDayName = DAYS_DE[nd];
           screens.push(makeMsg([
             '',
             padCenter('GESCHLOSSEN', C),
             '',
-            padCenter(`NAECHSTER TAG:`, C),
+            padCenter(`NÄCHSTER TAG:`, C),
             padCenter(`${nextDayName} 10:00`, C),
           ]));
         }
 
-        // 3: Appointment hint OR Live Staff
+        // 2: Live Staff
         if (salonData && salonData.employees && salonData.employees.length > 0) {
           const cNames = salonData.employees.join(', ').toUpperCase();
           let p1 = cNames, p2 = '';
@@ -443,7 +427,7 @@
              let sIdx = cNames.lastIndexOf(',', C);
              if (sIdx === -1) sIdx = cNames.lastIndexOf(' ', C);
              if (sIdx !== -1) {
-                 p1 = cNames.substring(0, sIdx + 1); // keep comma
+                 p1 = cNames.substring(0, sIdx + 1);
                  p2 = cNames.substring(sIdx + 1).trim();
              } else {
                  p1 = cNames.substring(0, C);
@@ -457,41 +441,15 @@
             p2 ? padCenter(p2, C) : '',
             ''
           ]));
-        } else {
-          screens.push(makeMsg([
-            padCenter('HEUTE KEINE FREIEN', C),
-            padCenter('TERMINE', C),
-            '',
-            padCenter('NAECHSTER FREIER', C),
-            padCenter('TERMIN: MORGEN 10:00', C),
-          ]));
         }
 
-        // 4: Booking
+        // 3: Hours
         screens.push(makeMsg([
-          padCenter('TERMIN BUCHEN', C),
-          '',
-          padCenter('ONLINE UNTER', C),
-          padCenter('THECOLORIST', C),
-          padCenter('.BELBO.COM/TERMIN', C),
-        ]));
-
-        // 5: Hours
-        screens.push(makeMsg([
-          padCenter('OEFFNUNGSZEITEN', C),
+          padCenter('ÖFFNUNGSZEITEN', C),
           '',
           padCenter('DI - SA', C),
           padCenter('10:00 - 18:00', C),
           padCenter('SO/MO GESCHLOSSEN', C),
-        ]));
-
-        // 6: Address
-        screens.push(makeMsg([
-          padCenter('THE COLORIST', C),
-          '',
-          padCenter('DORFSTRASSE 81', C),
-          padCenter('8706 MEILEN', C),
-          padCenter('THECOLORIST.CH', C),
         ]));
 
         return screens;
