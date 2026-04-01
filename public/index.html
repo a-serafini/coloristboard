@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no" />
+    <title>The Colorist – Terminübersicht</title>
+    <meta name="description" content="Split-Flap Terminübersicht für The Colorist Salon in Meilen" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@100;300;400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <style>
+      * { box-sizing: border-box; margin: 0; }
+      html, body {
+        width: 100%; height: 100%;
+        overflow: hidden;
+        background: #000;
+        font-family: "Inter", sans-serif;
+        user-select: none;
+      }
+
+      /* ── Status bar ── */
+      #status-bar {
+        position: fixed; bottom: 0; left: 0; right: 0;
+        height: 40px;
+        background: rgba(0,0,0,0.88);
+        backdrop-filter: blur(10px);
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 0 16px; z-index: 100;
+        font-size: 11px; color: #555;
+        border-top: 1px solid rgba(255,255,255,0.06);
+      }
+      .sb-left { display: flex; align-items: center; gap: 10px; }
+      .sb-dot {
+        width: 7px; height: 7px; border-radius: 50%;
+        background: #333; transition: background 0.3s, box-shadow 0.3s;
+      }
+      .sb-dot.open { background: #22c55e; box-shadow: 0 0 8px rgba(34,197,94,0.4); }
+      .sb-dot.closed { background: #ef4444; box-shadow: 0 0 8px rgba(239,68,68,0.3); }
+      .sb-label { font-size: 11px; color: #555; }
+      .sb-right { font-family: 'Roboto Mono', monospace; font-size: 11px; color: #444; letter-spacing: 1px; }
+
+      /* ── Accent ── */
+      .accent-bar {
+        position: fixed; top: 0; left: 0; right: 0; height: 3px;
+        background: linear-gradient(90deg, transparent 0%, #79BD74 50%, transparent 100%);
+        opacity: 0.5; z-index: 100;
+      }
+
+      /* ── Progress dots ── */
+      .progress-dots {
+        position: fixed; bottom: 52px; left: 50%; transform: translateX(-50%);
+        display: flex; gap: 8px; z-index: 100;
+      }
+      .pdot {
+        width: 6px; height: 6px; border-radius: 50%;
+        background: rgba(255,255,255,0.1); transition: background 0.3s, transform 0.3s;
+      }
+      .pdot.active { background: #79BD74; transform: scale(1.4); }
+
+      /* ── Board area ── */
+      .board-area {
+        width: 100%; height: 100%;
+        display: flex; justify-content: center; align-items: center;
+        overflow: hidden;
+      }
+      #vestaboard-wrapper {
+        position: relative; transform-origin: center center;
+        transition: opacity 0.25s ease;
+      }
+
+      /* ── Structural (from splitflap.org) ── */
+      .rocker-switch * { box-sizing: border-box; }
+      .rocker-switch { position: relative; will-change: transform; }
+      .bezel, .bezel-highlight, .recessed-hole-stroke, .recessed-hole-bg,
+      .rocker-wrapper-top, .rocker-wrapper-bot, .rocker-wrapper-falling,
+      .rocker-split-overlay, .ridges { position: absolute; }
+      .bezel-highlight { pointer-events: none; }
+      .rocker-top, .rocker-bot, .ridge { width: 100%; box-sizing: border-box; }
+      .rocker-top, .rocker-bot { height: 100%; }
+      .ridges { display: flex; flex-direction: column; overflow: hidden; }
+      .rocker-scale-wrapper { contain: layout style paint; }
+    </style>
+    <style id="dynamic-board-css"></style>
+  </head>
+  <body>
+    <div class="accent-bar"></div>
+    <div class="board-area" id="board-area">
+      <div id="vestaboard-wrapper"></div>
+    </div>
+    <div class="progress-dots" id="progress-dots"></div>
+    <div id="status-bar">
+      <div class="sb-left">
+        <div class="sb-dot" id="sb-dot"></div>
+        <span class="sb-label" id="sb-label">Verbinde...</span>
+      </div>
+      <div class="sb-right" id="sb-clock"></div>
+    </div>
+
+    <script>
+      // ═══════════════════════════════════════════
+      // SPLITFLAP ENGINE — from splitflap.org
+      // (board rendering, CSS builder, animation)
+      // ═══════════════════════════════════════════
+
+      const SPOOL = Array.from(" ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%&*()-+=:;',./?\u00C4\u00D6\u00DC");
+      function spoolIndexOf(ch) { const i = SPOOL.indexOf(ch); return i !== -1 ? i : 0; }
+      const SPOOL_SET = new Set(SPOOL);
+      function sanitize(text) {
+        return Array.from(text).map(ch => SPOOL_SET.has(ch) ? ch : ' ').join('');
+      }
+
+      const S = {
+        animDuration: 360, animPerspective: 3000, animStagger: 40,
+        animEasing: "ease-in-out", msgDelay: 7000,
+        fastSpeed: 25, soundVolume: 0.6, soundRate: 1.5,
+        cols: 22, rows: 5, scale: 0.22, gridGap: 11,
+        fontFamily: "'Roboto Mono', monospace",
+        fontSize: 247, fontWeight: 300, fontX: 0, fontY: -52, fontColor: "#ffffff",
+        boardPad: 13, boardShadow: 0.4, boardRadius: 6, boardBg: "#0f0f0f",
+        previewBg: "#000000",
+        width: 250, height: 540, split: 194,
+        pinch: 14, pinchHeight: 54, pinchSlope: 7,
+        outerRadius: 30, bezelRadius: 30, radius: 24,
+        shadow: 0, padBezel: 10, padHole: 24, gap: 7,
+        highlightInset: 0, strokeW: 0,
+        ridgeCount: 7, ridgeHeight: 7, ridgeGap: 1, ridgeRadius: 20,
+        ridgeShadow: 0, ridgeBottom: 0, ridgeMargin: 0,
+        r1: "#000000", r2: "#000000", r3: "#000000", r4: "#000000",
+        c_bg: "#0f0f0f", c_holeStroke: "#000000", c_holeBg: "#040404",
+        g_bezel1: "#000000", g_bezel2: "#000000",
+        g_top1: "#0f0f0f", g_top2: "#0f0f0f",
+        g_bot1: "#0f0f0f", g_bot2: "#0f0f0f", g_bot3: "#0f0f0f",
+        autoFit: true,
+      };
+
+      const boardWrapper = document.getElementById("vestaboard-wrapper");
+      const boardArea = document.getElementById("board-area");
+      const dynamicCSS = document.getElementById("dynamic-board-css");
+
+      // ── AUDIO ──
+      let audioCtx = null, activeAudioCount = 0, lastClickMs = 0;
+      const MAX_CONCURRENT_AUDIO = 8, MIN_CLICK_INTERVAL = 25;
+      function getAudioCtx() {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === "suspended") audioCtx.resume();
+        return audioCtx;
+      }
+      function synthClick(vol, rate) {
+        const ctx = getAudioCtx(), now = ctx.currentTime, dur = 0.035;
+        const buf = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate), d = buf.getChannelData(0);
+        const freq = 3500 * rate;
+        for (let i = 0; i < d.length; i++) {
+          const t = i / ctx.sampleRate;
+          d[i] = (Math.random()*2-1 + Math.sin(2*Math.PI*freq*1.5*t)*0.3) * Math.exp(-t/0.003);
+        }
+        const src = ctx.createBufferSource(); src.buffer = buf;
+        const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = freq; hp.Q.value = 1.5;
+        const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = Math.min(freq*3,12000); lp.Q.value = 0.7;
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(vol, now); gain.gain.exponentialRampToValueAtTime(0.001, now+dur);
+        src.connect(hp); hp.connect(lp); lp.connect(gain); gain.connect(ctx.destination);
+        activeAudioCount++; src.onended = () => { activeAudioCount--; };
+        src.start(now); src.stop(now+dur);
+      }
+      function playClick(vol, rate) {
+        const now = performance.now();
+        if (now - lastClickMs < MIN_CLICK_INTERVAL || activeAudioCount >= MAX_CONCURRENT_AUDIO) return;
+        lastClickMs = now;
+        synthClick(vol, rate);
+      }
+
+      // ── BOARD RENDERING ──
+      let currentChars = [], cellCache = [];
+      function blankGrid() { return Array(S.cols * S.rows).fill(" "); }
+      function messageToGrid(msg) {
+        const lines = msg.split("\n"), g = [];
+        for (let r = 0; r < S.rows; r++) {
+          let c = Array.from((lines[r] || "").toUpperCase());
+          while (c.length < S.cols) c.push(" ");
+          g.push(...c.slice(0, S.cols));
+        }
+        return g;
+      }
+      function renderBoard() {
+        const total = S.cols * S.rows;
+        if (currentChars.length !== total) currentChars = blankGrid();
+        let ridges = "";
+        for (let i = 0; i < S.ridgeCount; i++) ridges += '<div class="ridge"></div>';
+        let html = '<div class="vestaboard-grid">';
+        currentChars.forEach((ch, i) => {
+          const dc = ch === " " ? "" : ch;
+          html += `<div class="rocker-scale-wrapper"><div class="rocker-switch" data-idx="${i}"><div class="bezel"><div class="bezel-highlight"></div></div><div class="recessed-hole-stroke"><div class="recessed-hole-bg"><div class="rocker-wrapper-top"><div class="rocker-top" data-role="top-bg"></div><div class="rocker-text rocker-text-top" data-role="static-top">${dc}</div></div><div class="rocker-wrapper-bot"><div class="rocker-bot" data-role="bot-bg"><div class="ridges">${ridges}</div></div><div class="rocker-text rocker-text-bot" data-role="static-bot">${dc}</div></div><div class="rocker-wrapper-falling"><div class="rocker-falling-front"><div class="rocker-top" data-role="falling-bg"></div><div class="rocker-text rocker-text-top" data-role="falling-txt">${dc}</div></div></div><div class="rocker-split-overlay"></div></div></div></div></div>`;
+        });
+        html += "</div>";
+        boardWrapper.innerHTML = html;
+        cellCache = [];
+        for (let i = 0; i < total; i++) {
+          const sw = boardWrapper.querySelector(`.rocker-switch[data-idx="${i}"]`);
+          if (!sw) { cellCache.push(null); continue; }
+          cellCache.push({
+            sTop: sw.querySelector('[data-role="static-top"]'),
+            sBtm: sw.querySelector('[data-role="static-bot"]'),
+            fTxt: sw.querySelector('[data-role="falling-txt"]'),
+            topBg: sw.querySelector('[data-role="top-bg"]'),
+            botBg: sw.querySelector('[data-role="bot-bg"]'),
+            fallBg: sw.querySelector('[data-role="falling-bg"]'),
+            wrap: sw.querySelector(".rocker-wrapper-falling"),
+          });
+        }
+      }
+
+      // ── ANIMATION ENGINE ──
+      let animQueue = [], animRAF = null, animT0 = 0, animTarget = null, animDoneCb = null;
+      let isFlipping = false;
+      function scheduleAction(t, fn) { animQueue.push({ time: t, fn }); }
+      function animTick(now) {
+        const el = now - animT0;
+        let i = 0;
+        while (i < animQueue.length && animQueue[i].time <= el) { animQueue[i].fn(); i++; }
+        if (i > 0) animQueue.splice(0, i);
+        if (animQueue.length > 0) animRAF = requestAnimationFrame(animTick);
+        else {
+          animRAF = null; currentChars = [...animTarget];
+          isFlipping = false; if (animDoneCb) animDoneCb();
+        }
+      }
+      function startAnimLoop() { animQueue.sort((a,b) => a.time - b.time); animT0 = performance.now(); animRAF = requestAnimationFrame(animTick); }
+      function cancelAnimLoop() {
+        if (animRAF) { cancelAnimationFrame(animRAF); animRAF = null; }
+        animQueue = [];
+        cellCache.forEach(c => { if (c && c.wrap && c.wrap._anim) try { c.wrap._anim.cancel(); } catch(_) {} });
+      }
+      function getDelay(idx) { return (idx % S.cols) * S.animStagger + Math.floor(idx / S.cols) * S.animStagger * 1.5; }
+
+      function buildCellSchedule(idx, oldChar, newChar) {
+        const c = cellCache[idx];
+        if (!c) return 0;
+        const delay = getDelay(idx);
+        let oi = spoolIndexOf(oldChar || " "), ni = spoolIndexOf(newChar || " ");
+        let steps = ni - oi;
+        if (steps < 0) steps += SPOOL.length;
+        if (steps === 0 && oldChar !== newChar) steps = 1;
+        const path = [];
+        for (let i = 1; i <= steps; i++) path.push(SPOOL[(oi + i) % SPOOL.length]);
+        if (!path.length || path[path.length-1] !== (newChar || " ")) path.push(newChar || " ");
+
+        let t = delay;
+        const FAST = S.fastSpeed, FINAL = S.animDuration;
+        path.forEach((char, i) => {
+          const isLast = i === path.length - 1;
+          const speed = isLast ? FINAL : FAST;
+          const easing = isLast ? S.animEasing : "linear";
+          const dc = char === " " ? "" : char;
+          const prev = i === 0 ? (oldChar || " ") : path[i-1];
+          const pdc = prev === " " ? "" : prev;
+          const capturedT = t, capturedSpeed = speed;
+
+          if (!isLast) {
+            scheduleAction(capturedT, () => {
+              if (c.sTop) c.sTop.textContent = dc;
+              if (c.sBtm) c.sBtm.textContent = dc;
+              if (i % 3 === 0) playClick(S.soundVolume, S.soundRate);
+            });
+          } else {
+            scheduleAction(capturedT, () => {
+              if (c.sTop) c.sTop.textContent = dc;
+              if (c.fTxt) c.fTxt.textContent = pdc;
+              if (c.wrap) {
+                if (c.wrap._anim) try { c.wrap._anim.cancel(); } catch(_) {}
+                c.wrap.style.opacity = "1";
+                c.wrap._anim = c.wrap.animate(
+                  [{ transform: "rotateX(0deg)", opacity: 1 }, { transform: "rotateX(-90deg)", opacity: 0 }],
+                  { duration: capturedSpeed, easing, fill: "forwards" }
+                );
+              }
+              playClick(S.soundVolume, S.soundRate);
+            });
+            scheduleAction(capturedT + capturedSpeed * 0.5, () => {
+              if (c.sBtm) c.sBtm.textContent = dc;
+            });
+            scheduleAction(capturedT + capturedSpeed, () => {
+              if (c.wrap) {
+                if (c.wrap._anim) try { c.wrap._anim.cancel(); } catch(_) {}
+                c.wrap.style.opacity = "0"; c.wrap.style.transform = "";
+              }
+              if (c.fTxt) c.fTxt.textContent = dc;
+            });
+          }
+          t += speed;
+        });
+        return t;
+      }
+
+      function flipToTarget(target, onDone) {
+        if (isFlipping) { if (onDone) onDone(); return; }
+        isFlipping = true;
+        const total = S.cols * S.rows;
+        if (currentChars.length !== total) currentChars = blankGrid();
+        const changed = [];
+        for (let i = 0; i < total; i++) if (currentChars[i] !== target[i]) changed.push(i);
+        if (!changed.length) { isFlipping = false; if (onDone) onDone(); return; }
+        cancelAnimLoop();
+        animTarget = target;
+        animDoneCb = onDone || null;
+        animQueue = [];
+        let mx = 0;
+        changed.forEach(idx => { const e = buildCellSchedule(idx, currentChars[idx], target[idx]); if (e > mx) mx = e; });
+        scheduleAction(mx + 50, () => {});
+        startAnimLoop();
+      }
+
+      // ── CSS BUILDER (from splitflap.org) ──
+      function buildCornerArcs(w, h, r) {
+        const p = v => v.toFixed(1) + "px";
+        return {
+          tl: [`0px ${p(r)}`, `${p(r*0.05)} ${p(r*0.65)}`, `${p(r*0.25)} ${p(r*0.25)}`, `${p(r*0.65)} ${p(r*0.05)}`, `${p(r)} 0px`],
+          tr: [`${p(w-r)} 0px`, `${p(w-r*0.65)} ${p(r*0.05)}`, `${p(w-r*0.25)} ${p(r*0.25)}`, `${p(w-r*0.05)} ${p(r*0.65)}`, `${p(w)} ${p(r)}`],
+          br: [`${p(w)} ${p(h-r)}`, `${p(w-r*0.05)} ${p(h-r*0.65)}`, `${p(w-r*0.25)} ${p(h-r*0.25)}`, `${p(w-r*0.65)} ${p(h-r*0.05)}`, `${p(w-r)} ${p(h)}`],
+          bl: [`${p(r)} ${p(h)}`, `${p(r*0.65)} ${p(h-r*0.05)}`, `${p(r*0.25)} ${p(h-r*0.25)}`, `${p(r*0.05)} ${p(h-r*0.65)}`, `0px ${p(h-r)}`],
+        };
+      }
+      function buildDynamicCSS() {
+        const s = S;
+        const hw = s.width - s.padHole*2, hh = s.height - s.padHole*2 + 10;
+        const ihw = hw - s.strokeW*2, ihh = hh - s.strokeW*2, ir = Math.max(0, s.radius - s.strokeW);
+        const py1 = Math.max(s.radius, s.split - s.pinchHeight - s.pinchSlope);
+        const py2 = s.split - s.pinchHeight;
+        const py3 = s.split + s.gap + s.pinchHeight;
+        const py4 = Math.min(hh - s.radius, s.split + s.gap + s.pinchHeight + s.pinchSlope);
+        const c = buildCornerArcs(hw, hh, s.radius), ic = buildCornerArcs(ihw, ihh, ir);
+        const holeClip = `polygon(${c.tl},${c.tr},${hw}px ${py1}px,${hw-s.pinch}px ${py2}px,${hw-s.pinch}px ${py3}px,${hw}px ${py4}px,${c.br},${c.bl},0px ${py4}px,${s.pinch}px ${py3}px,${s.pinch}px ${py2}px,0px ${py1}px)`;
+        const ipy1=Math.max(ir,py1-s.strokeW), ipy2=py2-s.strokeW, ipy3=py3-s.strokeW, ipy4=Math.min(ihh-ir,py4-s.strokeW);
+        const holeBgClip = `polygon(${ic.tl},${ic.tr},${ihw}px ${ipy1}px,${ihw-s.pinch}px ${ipy2}px,${ihw-s.pinch}px ${ipy3}px,${ihw}px ${ipy4}px,${ic.br},${ic.bl},0px ${ipy4}px,${s.pinch}px ${ipy3}px,${s.pinch}px ${ipy2}px,0px ${ipy1}px)`;
+        const topH = s.split - s.strokeW;
+        const topClip = `polygon(${ic.tl},${ic.tr},${ihw}px ${ipy1}px,${ihw-s.pinch}px ${ipy2}px,${ihw-s.pinch}px ${topH}px,${s.pinch}px ${topH}px,${s.pinch}px ${ipy2}px,0px ${ipy1}px)`;
+        const botH = ihh - topH - s.gap;
+        const lpy3 = s.pinchHeight, lpy4 = s.pinchHeight + s.pinchSlope;
+        const botClip = `polygon(${s.pinch}px 0px,${ihw-s.pinch}px 0px,${ihw-s.pinch}px ${lpy3}px,${ihw}px ${lpy4}px,${ic.br},${ic.bl},0px ${lpy4}px,${s.pinch}px ${lpy3}px)`;
+        const rh = v => Math.round(v*255).toString(16).padStart(2,"0");
+        return `.rocker-switch{width:${s.width}px;height:${s.height}px;border-radius:${s.outerRadius}px;background-color:${s.c_bg};transform-style:preserve-3d}.bezel{left:${s.padBezel}px;top:${s.padBezel-7}px;width:${s.width-s.padBezel*2}px;height:${s.height-s.padBezel*2+10}px;border-radius:${s.bezelRadius}px;background:linear-gradient(to bottom,${s.g_bezel1},${s.g_bezel2})}.bezel-highlight{inset:${s.highlightInset}px;border:0px solid rgba(255,255,255,.05);border-radius:${Math.max(0,s.bezelRadius-s.highlightInset)}px}.recessed-hole-stroke{left:${s.padHole}px;top:${s.padHole-5}px;width:${hw}px;height:${hh}px;background-color:${s.c_holeStroke};-webkit-clip-path:${holeClip};clip-path:${holeClip}}.recessed-hole-bg{left:${s.strokeW}px;top:${s.strokeW}px;width:${ihw}px;height:${ihh}px;background-color:${s.c_holeBg};-webkit-clip-path:${holeBgClip};clip-path:${holeBgClip}}.rocker-wrapper-top{left:0;top:0;width:${ihw}px;height:${topH}px;overflow:hidden}.rocker-top{background:linear-gradient(to bottom,${s.g_top1},${s.g_top2});-webkit-clip-path:${topClip};clip-path:${topClip};transition:background 60ms}.rocker-wrapper-bot{left:0;top:${topH+s.gap}px;width:${ihw}px;height:${botH}px;overflow:hidden}.rocker-bot{background:linear-gradient(to bottom,${s.g_bot1} 0%,${s.g_bot2} 60%,${s.g_bot3} 100%);-webkit-clip-path:${botClip};clip-path:${botClip};transition:background 60ms}.rocker-wrapper-falling{left:0;top:0;width:${ihw}px;height:${topH}px;transform-origin:bottom center;z-index:5;transform-style:preserve-3d;opacity:0;pointer-events:none}.rocker-falling-front{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;-webkit-clip-path:${topClip};clip-path:${topClip};overflow:hidden}.rocker-split-overlay{position:absolute;left:0;width:${ihw}px;top:${topH}px;height:${s.gap}px;background-color:${s.c_holeBg};z-index:20;pointer-events:none;box-shadow:0 -1px 2px rgba(0,0,0,.9),0 1px 2px rgba(0,0,0,.9)}.ridges{bottom:${s.ridgeBottom}px;left:${s.ridgeMargin}px;width:calc(100% - ${s.ridgeMargin*2}px);height:${s.ridgeHeight*s.ridgeCount+s.ridgeGap*(s.ridgeCount-1)}px}.ridge{height:${s.ridgeHeight}px;margin-bottom:${s.ridgeGap}px;border-radius:${s.ridgeRadius}px;background:linear-gradient(to bottom,${s.r1}${rh(s.ridgeShadow)} 0%,${s.r2}05 20%,${s.r3}66 70%,${s.r4}e6 100%);border-top:none}.vestaboard-grid{display:grid;grid-template-columns:repeat(${s.cols},auto);gap:${s.gridGap}px;padding:${s.boardPad}px;background-color:${s.boardBg};box-shadow:0 10px 30px -5px rgba(0,0,0,${s.boardShadow}),0 4px 10px rgba(0,0,0,${s.boardShadow*0.5});border-radius:${s.boardRadius}px}.rocker-scale-wrapper{perspective:${s.animPerspective}px;width:calc(${s.width}px*${s.scale});height:calc(${s.height}px*${s.scale});position:relative}.rocker-switch{transform:scale(${s.scale});transform-origin:top left}.rocker-text{position:absolute;width:${ihw}px;height:${ihh}px;display:flex;justify-content:center;align-items:center;z-index:10;pointer-events:none;font-family:${s.fontFamily};font-size:${s.fontSize}px;font-weight:${s.fontWeight};color:${s.fontColor};transform:translate(${s.fontX}px,${s.fontY}px);line-height:1;text-align:center;transition:opacity 80ms}.rocker-text-top{top:0;left:0}.rocker-text-bot{top:-${topH+s.gap}px;left:0}`;
+      }
+      function applyAutoFit() {
+        if (!S.autoFit) return;
+        const grid = boardWrapper.querySelector(".vestaboard-grid");
+        if (!grid) return;
+        boardWrapper.style.transform = "none";
+        boardWrapper.style.width = ""; boardWrapper.style.height = "";
+        requestAnimationFrame(() => {
+          const bw = grid.offsetWidth, bh = grid.offsetHeight;
+          if (!bw || !bh) return;
+          const rect = boardArea.getBoundingClientRect();
+          const fr = Math.min((rect.width - 32) / bw, (rect.height - 80) / bh);
+          boardWrapper.style.width = bw + "px"; boardWrapper.style.height = bh + "px";
+          boardWrapper.style.transform = `scale(${Math.min(fr, 2)})`;
+        });
+      }
+      window.addEventListener("resize", () => { if (S.autoFit) requestAnimationFrame(applyAutoFit); });
+
+      // ═══════════════════════════════════════════
+      // THE COLORIST — Screen Content
+      // ═══════════════════════════════════════════
+      const DAYS_DE = ['SONNTAG','MONTAG','DIENSTAG','MITTWOCH','DONNERSTAG','FREITAG','SAMSTAG'];
+      const DAYS_SHORT = ['SO','MO','DI','MI','DO','FR','SA'];
+      const MONTHS_DE = ['JANUAR','FEBRUAR','MAERZ','APRIL','MAI','JUNI','JULI','AUGUST','SEPTEMBER','OKTOBER','NOVEMBER','DEZEMBER'];
+
+      function padCenter(text, w) {
+        text = sanitize(text.toUpperCase()).substring(0, w);
+        const pad = Math.max(0, w - text.length);
+        const left = Math.floor(pad / 2);
+        return ' '.repeat(left) + text + ' '.repeat(pad - left);
+      }
+      function makeMsg(lines) {
+        const out = [];
+        for (let r = 0; r < S.rows; r++) out.push((lines[r] || '').padEnd(S.cols).substring(0, S.cols));
+        return out.join("\n");
+      }
+
+      let salonData = null;
+      async function fetchSalonData() {
+        try {
+          const res = await fetch('/api/status');
+          if (res.ok) {
+            salonData = await res.json();
+          }
+        } catch (e) {
+          console.error("Failed to fetch salon data", e);
+        }
+      }
+      setInterval(fetchSalonData, 5 * 60 * 1000);
+      fetchSalonData();
+
+      function getScreens() {
+        const C = S.cols;
+        const now = new Date();
+        const ds = DAYS_SHORT[now.getDay()];
+        const month = MONTHS_DE[now.getMonth()];
+        const date = now.getDate();
+        const year = now.getFullYear();
+        const h = String(now.getHours()).padStart(2,'0');
+        const m = String(now.getMinutes()).padStart(2,'0');
+        const dow = now.getDay();
+        const isOpen = dow >= 2 && dow <= 6 && now.getHours() >= 10 && now.getHours() < 18;
+
+        const screens = [];
+
+        // 1: Welcome
+        screens.push(makeMsg([
+          padCenter('THE COLORIST', C),
+          padCenter('MEILEN', C),
+          '',
+          padCenter(`${ds} ${date}. ${month} ${year}`, C),
+          padCenter(`${h}:${m}`, C),
+        ]));
+
+        // 2: Status
+        if (isOpen) {
+          screens.push(makeMsg([
+            '',
+            padCenter('GEOEFFNET', C),
+            padCenter(`HEUTE BIS 18:00 UHR`, C),
+            '',
+            padCenter(`NOCH ${18 - now.getHours()} STUNDEN`, C),
+          ]));
+        } else {
+          let nextDayName = '';
+          let nd = dow;
+          do { nd = (nd+1)%7; } while (nd < 2 || nd > 6);
+          nextDayName = DAYS_DE[nd];
+          screens.push(makeMsg([
+            '',
+            padCenter('GESCHLOSSEN', C),
+            '',
+            padCenter(`NAECHSTER TAG:`, C),
+            padCenter(`${nextDayName} 10:00`, C),
+          ]));
+        }
+
+        // 3: Appointment hint OR Live Staff
+        if (salonData && salonData.employees && salonData.employees.length > 0) {
+          const cNames = salonData.employees.join(', ').toUpperCase();
+          let p1 = cNames, p2 = '';
+          if (cNames.length > C) {
+             let sIdx = cNames.lastIndexOf(',', C);
+             if (sIdx === -1) sIdx = cNames.lastIndexOf(' ', C);
+             if (sIdx !== -1) {
+                 p1 = cNames.substring(0, sIdx + 1); // keep comma
+                 p2 = cNames.substring(sIdx + 1).trim();
+             } else {
+                 p1 = cNames.substring(0, C);
+                 p2 = cNames.substring(C);
+             }
+          }
+          screens.push(makeMsg([
+            padCenter('HEUTE IM SALON:', C),
+            '',
+            padCenter(p1, C),
+            p2 ? padCenter(p2, C) : '',
+            ''
+          ]));
+        } else {
+          screens.push(makeMsg([
+            padCenter('HEUTE KEINE FREIEN', C),
+            padCenter('TERMINE', C),
+            '',
+            padCenter('NAECHSTER FREIER', C),
+            padCenter('TERMIN: MORGEN 10:00', C),
+          ]));
+        }
+
+        // 4: Booking
+        screens.push(makeMsg([
+          padCenter('TERMIN BUCHEN', C),
+          '',
+          padCenter('ONLINE UNTER', C),
+          padCenter('THECOLORIST', C),
+          padCenter('.BELBO.COM/TERMIN', C),
+        ]));
+
+        // 5: Hours
+        screens.push(makeMsg([
+          padCenter('OEFFNUNGSZEITEN', C),
+          '',
+          padCenter('DI - SA', C),
+          padCenter('10:00 - 18:00', C),
+          padCenter('SO/MO GESCHLOSSEN', C),
+        ]));
+
+        // 6: Address
+        screens.push(makeMsg([
+          padCenter('THE COLORIST', C),
+          '',
+          padCenter('DORFSTRASSE 81', C),
+          padCenter('8706 MEILEN', C),
+          padCenter('THECOLORIST.CH', C),
+        ]));
+
+        return screens;
+      }
+
+      // ── Screen cycling ──
+      let currentScreenIdx = -1;
+      let screenTimer = null;
+      function updateDots(total) {
+        const el = document.getElementById('progress-dots');
+        if (el.children.length !== total) {
+          el.innerHTML = '';
+          for (let i = 0; i < total; i++) { const d = document.createElement('div'); d.className = 'pdot'; el.appendChild(d); }
+        }
+        Array.from(el.children).forEach((d,i) => d.classList.toggle('active', i === currentScreenIdx));
+      }
+      function showNextScreen() {
+        const screens = getScreens();
+        currentScreenIdx = (currentScreenIdx + 1) % screens.length;
+        updateDots(screens.length);
+        flipToTarget(messageToGrid(screens[currentScreenIdx]), () => {
+          screenTimer = setTimeout(showNextScreen, S.msgDelay);
+        });
+      }
+
+      // ── Clock ──
+      function updateClock() {
+        const now = new Date();
+        const h = String(now.getHours()).padStart(2,'0');
+        const m = String(now.getMinutes()).padStart(2,'0');
+        const s = String(now.getSeconds()).padStart(2,'0');
+        document.getElementById('sb-clock').textContent = `${h}:${m}:${s}`;
+        const dow = now.getDay(), hr = now.getHours();
+        const isOpen = dow >= 2 && dow <= 6 && hr >= 10 && hr < 18;
+        document.getElementById('sb-dot').className = 'sb-dot ' + (isOpen ? 'open' : 'closed');
+        document.getElementById('sb-label').textContent = isOpen ? 'Ge\u00F6ffnet' : 'Geschlossen';
+      }
+
+      // ── Init ──
+      document.addEventListener("DOMContentLoaded", () => {
+        boardArea.style.backgroundColor = S.previewBg;
+        currentChars = blankGrid();
+        renderBoard();
+        dynamicCSS.textContent = buildDynamicCSS();
+        applyAutoFit();
+        updateClock();
+        setInterval(updateClock, 1000);
+
+        // Enable audio on interaction
+        document.addEventListener("click", () => getAudioCtx(), { once: true });
+        document.addEventListener("touchstart", () => getAudioCtx(), { once: true });
+
+        // Start cycling with short initial delay
+        setTimeout(showNextScreen, 800);
+      });
+    </script>
+  </body>
+</html>
