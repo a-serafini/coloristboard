@@ -361,16 +361,28 @@
             padCenter(`NOCH ${18 - now.getHours()} STUNDEN`, C),
           ]));
         } else {
-          let nd = dow;
-          do { nd = (nd+1)%7; } while (nd < 2 || nd > 6);
-          const nextDayName = DAYS_DE[nd];
-          screens.push(makeMsg([
-            '',
-            padCenter('GESCHLOSSEN', C),
-            '',
-            padCenter(`NÄCHSTER TAG:`, C),
-            padCenter(`${nextDayName} 10:00`, C),
-          ]));
+          const isWorkDay = dow >= 2 && dow <= 6;
+          const beforeOpen = isWorkDay && now.getHours() < 10;
+          if (beforeOpen) {
+            screens.push(makeMsg([
+              '',
+              padCenter('GESCHLOSSEN', C),
+              '',
+              padCenter('ÖFFNET HEUTE UM', C),
+              padCenter('10:00 UHR', C),
+            ]));
+          } else {
+            let nd = dow;
+            do { nd = (nd+1)%7; } while (nd < 2 || nd > 6);
+            const nextDayName = DAYS_DE[nd];
+            screens.push(makeMsg([
+              '',
+              padCenter('GESCHLOSSEN', C),
+              '',
+              padCenter(`NÄCHSTER TAG:`, C),
+              padCenter(`${nextDayName} 10:00`, C),
+            ]));
+          }
         }
 
         // 2: Live Staff
